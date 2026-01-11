@@ -1,0 +1,22 @@
+# EFT Fingerprint Viewer - Python Dependencies
+# 
+# This project uses only Python standard library modules.
+# No external packages are required.
+#
+# Python 3.8+ is required.
+#
+# The following standard library modules are used:
+# - http.server (HTTP server)
+# - json (JSON parsing)
+# - subprocess (running NBIS tools)
+# - tempfile (temporary file handling)
+# - pathlib (path operations)
+# - base64 (image encoding)
+# - shutil (file operations)
+# - os, sys (system operations)
+# - re (regular expressions)
+# - cgi (form data parsing)
+#
+# External tools required (installed separately):
+# - NIST NBIS (an2ktool, dwsq)
+# - OpenJPEG (opj_decompress)

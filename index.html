@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EFT Fingerprint Viewer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #111118;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #e8e8ed;
+            --text-secondary: #888899;
+            --text-muted: #555566;
+            --accent-green: #00ff88;
+            --accent-green-dim: #00cc6a;
+            --accent-amber: #ffaa00;
+            --accent-blue: #00aaff;
+            --border-color: #2a2a38;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --error: #ff4466;
+        }
+
+        body {
+            font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: var(--accent-green);
+            letter-spacing: 0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        h1 .icon {
+            font-size: 1.75rem;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Drop Zone */
+        .drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--bg-secondary);
+            margin-bottom: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .drop-zone::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.03) 0%, transparent 50%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            border-color: var(--accent-green);
+            background: var(--bg-tertiary);
+        }
+
+        .drop-zone:hover::before,
+        .drop-zone.dragover::before {
+            opacity: 1;
+        }
+
+        .drop-zone .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+
+        .drop-zone p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .drop-zone .hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* Buttons */
+        .btn {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            border: none;
+            padding: 0.75rem 1.5rem;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background: var(--accent-green-dim);
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+        }
+
+        /* File Info */
+        .file-info {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .file-info.visible {
+            display: flex;
+        }
+
+        .file-info .name {
+            color: var(--accent-green);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        /* Reset Button Container */
+        .reset-container {
+            display: none;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .reset-container.visible {
+            display: flex;
+        }
+
+        .btn-reset {
+            background: linear-gradient(135deg, #ff4444 0%, #cc3333 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(255, 68, 68, 0.3);
+        }
+
+        .btn-reset:hover {
+            background: linear-gradient(135deg, #ff5555 0%, #dd4444 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 68, 68, 0.4);
+        }
+
+        .btn-reset:active {
+            transform: translateY(0);
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 3rem;
+        }
+
+        .loading.visible {
+            display: block;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--bg-tertiary);
+            border-top-color: var(--accent-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: none;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tabs.visible {
+            display: flex;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 1rem 1.5rem;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-secondary);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-green);
+            border-bottom-color: var(--accent-green);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Transaction Bar */
+        .transaction-bar {
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.05) 0%, var(--bg-secondary) 100%);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: none;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .transaction-bar.visible {
+            display: flex;
+        }
+
+        .transaction-bar .item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .transaction-bar .item label {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .transaction-bar .item value {
+            color: var(--accent-green);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        /* Demographics */
+        .demographics-panel {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 1.5rem;
+        }
+
+        .demographics-panel h2 {
+            font-size: 0.9rem;
+            color: var(--accent-green);
+            margin-bottom: 1.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        .demographics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .demo-field {
+            background: var(--bg-primary);
+            padding: 0.875rem 1rem;
+            border-radius: 6px;
+            border-left: 3px solid var(--border-color);
+            transition: border-color 0.2s ease;
+        }
+
+        .demo-field:hover {
+            border-left-color: var(--accent-green);
+        }
+
+        .demo-field.highlight {
+            border-left-color: var(--accent-green);
+        }
+
+        .demo-field label {
+            display: block;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .demo-field value {
+            display: block;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+
+        /* Fingerprints Grid */
+        .fingerprints-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .fingerprint-card {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            transition: border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .fingerprint-card:hover {
+            border-color: var(--accent-green);
+            transform: translateY(-2px);
+        }
+
+        .fingerprint-card img {
+            width: 100%;
+            display: block;
+            background: #000;
+            cursor: pointer;
+        }
+
+        .fingerprint-card .info {
+            padding: 1rem 1.25rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .fingerprint-card .info h3 {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .fingerprint-card .info p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .fingerprint-card .actions {
+            padding: 0 1.25rem 1.25rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .fingerprint-card .actions .btn {
+            flex: 1;
+            justify-content: center;
+        }
+
+        /* Metadata View */
+        .metadata-container {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .metadata-record {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .metadata-record:last-child {
+            border-bottom: none;
+        }
+
+        .metadata-record-header {
+            background: var(--bg-primary);
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .metadata-record-header:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .metadata-record-header h3 {
+            font-size: 0.85rem;
+            color: var(--accent-green);
+            font-weight: 500;
+        }
+
+        .metadata-record-header .toggle {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            transition: transform 0.2s ease;
+        }
+
+        .metadata-record.open .toggle {
+            transform: rotate(180deg);
+        }
+
+        .metadata-record-body {
+            display: none;
+            padding: 0;
+        }
+
+        .metadata-record.open .metadata-record-body {
+            display: block;
+        }
+
+        .metadata-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .metadata-table tr {
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .metadata-table tr:last-child {
+            border-bottom: none;
+        }
+
+        .metadata-table tr:hover {
+            background: var(--bg-primary);
+        }
+
+        .metadata-table td {
+            padding: 0.6rem 1.5rem;
+            font-size: 0.8rem;
+            vertical-align: top;
+        }
+
+        .metadata-table .field-tag {
+            color: var(--accent-amber);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 500;
+            width: 100px;
+            white-space: nowrap;
+        }
+
+        .metadata-table .field-value {
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        /* Error / Warning Messages */
+        .message {
+            padding: 1.25rem 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .message.error {
+            background: rgba(255, 68, 102, 0.1);
+            border: 1px solid rgba(255, 68, 102, 0.3);
+            color: var(--error);
+        }
+
+        .message.warning {
+            background: rgba(255, 170, 0, 0.1);
+            border: 1px solid rgba(255, 170, 0, 0.3);
+            color: var(--warning);
+        }
+
+        .message .icon {
+            font-size: 1.25rem;
+        }
+
+        .message .content h4 {
+            margin-bottom: 0.5rem;
+        }
+
+        .message .content p {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        /* Validation Panel */
+        .validation-panel {
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .validation-panel.valid {
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, var(--bg-secondary) 100%);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .validation-panel.invalid {
+            background: linear-gradient(135deg, rgba(255, 170, 0, 0.1) 0%, var(--bg-secondary) 100%);
+            border: 1px solid rgba(255, 170, 0, 0.3);
+        }
+
+        .validation-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .validation-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .validation-badge.valid {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+        }
+
+        .validation-badge.invalid {
+            background: var(--warning);
+            color: var(--bg-primary);
+        }
+
+        .validation-title {
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .validation-messages {
+            margin-bottom: 1rem;
+        }
+
+        .validation-messages p {
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+            color: var(--text-secondary);
+        }
+
+        .validation-messages p.success {
+            color: var(--accent-green);
+        }
+
+        .validation-messages p.warning {
+            color: var(--warning);
+        }
+
+        .validation-messages p.error {
+            color: var(--error);
+        }
+
+        .validation-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .validation-section {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .validation-section h4 {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        .validation-list {
+            list-style: none;
+        }
+
+        .validation-list li {
+            font-size: 0.85rem;
+            padding: 0.35rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .validation-list li.present {
+            color: var(--accent-green);
+        }
+
+        .validation-list li.missing {
+            color: var(--warning);
+        }
+
+        .validation-list .icon {
+            font-size: 0.9rem;
+        }
+
+        /* No Data */
+        .no-data {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .no-data .icon {
+            font-size: 3rem;
+            opacity: 0.3;
+            margin-bottom: 1rem;
+        }
+
+        .no-data p {
+            font-size: 0.9rem;
+        }
+
+        /* Modal for full-size image */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .modal.visible {
+            display: flex;
+        }
+
+        .modal img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: var(--bg-tertiary);
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.5rem;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover {
+            background: var(--error);
+        }
+
+        /* Sample Button */
+        .sample-btn-container {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <span class="icon">🔍</span>
+                EFT Fingerprint Viewer
+            </h1>
+            <div class="status-badge">
+                <span class="status-dot"></span>
+                <span>NBIS Backend Connected</span>
+            </div>
+        </header>
+        
+        <div class="drop-zone" id="dropZone">
+            <div class="icon">📁</div>
+            <p>Drop your .eft file here or click to browse</p>
+            <p class="hint">Supports ANSI/NIST-ITL format with JP2 and WSQ compression</p>
+            <input type="file" id="fileInput" accept=".eft,.EFT">
+        </div>
+        
+        <div class="sample-btn-container">
+            <button class="btn btn-secondary" id="loadSampleBtn">
+                <span>📋</span> Load Test File
+            </button>
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <span class="name" id="fileName"></span>
+        </div>
+        
+        <div class="reset-container" id="resetContainer">
+            <button class="btn btn-reset" id="resetBtn">
+                <span>🔄</span> Clear & Reset
+            </button>
+        </div>
+
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner"></div>
+            <p>Processing EFT file with NBIS tools...</p>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div class="transaction-bar" id="transactionBar">
+            <div class="item">
+                <label>Transaction</label>
+                <value id="txnType">—</value>
+            </div>
+            <div class="item">
+                <label>Date</label>
+                <value id="txnDate">—</value>
+            </div>
+            <div class="item">
+                <label>Agency</label>
+                <value id="txnAgency">—</value>
+            </div>
+            <div class="item">
+                <label>Compression</label>
+                <value id="txnCompression">—</value>
+            </div>
+        </div>
+
+        <div id="validationContainer"></div>
+
+        <div class="tabs" id="tabs">
+            <button class="tab-btn active" data-tab="fingerprints">Fingerprints</button>
+            <button class="tab-btn" data-tab="demographics">Demographics</button>
+            <button class="tab-btn" data-tab="metadata">Verbose Metadata</button>
+        </div>
+
+        <div class="tab-content active" id="tab-fingerprints">
+            <div id="fingerprintsContainer"></div>
+        </div>
+
+        <div class="tab-content" id="tab-demographics">
+            <div id="demographicsContainer"></div>
+        </div>
+
+        <div class="tab-content" id="tab-metadata">
+            <div id="metadataContainer"></div>
+        </div>
+    </div>
+
+    <!-- Modal for full-size images -->
+    <div class="modal" id="imageModal">
+        <button class="modal-close" id="modalClose">✕</button>
+        <img id="modalImage" src="" alt="Full size fingerprint">
+    </div>
+
+    <script>
+        const API_BASE = '';  // Same origin
+        
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const errorContainer = document.getElementById('errorContainer');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const fingerprintsContainer = document.getElementById('fingerprintsContainer');
+        const demographicsContainer = document.getElementById('demographicsContainer');
+        const metadataContainer = document.getElementById('metadataContainer');
+        const tabs = document.getElementById('tabs');
+        const transactionBar = document.getElementById('transactionBar');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const validationContainer = document.getElementById('validationContainer');
+        const resetContainer = document.getElementById('resetContainer');
+
+        // Finger position names
+        const FINGER_POSITIONS = {
+            0: 'Unknown',
+            1: 'Right Thumb', 2: 'Right Index', 3: 'Right Middle', 4: 'Right Ring', 5: 'Right Little',
+            6: 'Left Thumb', 7: 'Left Index', 8: 'Left Middle', 9: 'Left Ring', 10: 'Left Little',
+            11: 'Plain Right Thumb', 12: 'Plain Left Thumb',
+            13: 'Plain Right Four', 14: 'Plain Left Four', 15: 'Plain Thumbs'
+        };
+
+        // Tab handling
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Event listeners
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', resetApp);
+        
+        document.getElementById('loadSampleBtn').addEventListener('click', async () => {
+            try {
+                clearError();
+                showLoading(true);
+                
+                const response = await fetch('test_FD-258/George-AMERICA-Washington-079d0f14-e.eft');
+                if (!response.ok) throw new Error('Failed to load test EFT file');
+                
+                const blob = await response.blob();
+                const file = new File([blob], 'George-Washington.eft', { type: 'application/octet-stream' });
+                
+                await processFile(file);
+            } catch (err) {
+                showError('Failed to load sample file: ' + err.message);
+                showLoading(false);
+            }
+        });
+
+        // Modal handlers
+        document.getElementById('modalClose').addEventListener('click', () => {
+            imageModal.classList.remove('visible');
+        });
+        imageModal.addEventListener('click', (e) => {
+            if (e.target === imageModal) {
+                imageModal.classList.remove('visible');
+            }
+        });
+
+        function handleFile(file) {
+            clearError();
+            showLoading(true);
+            
+            fileName.textContent = file.name;
+            fileInfo.classList.add('visible');
+
+            processFile(file);
+        }
+
+        async function processFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/parse`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                fileName.textContent = data.filename;
+                displayResults(data);
+                
+            } catch (err) {
+                showError(`Failed to process EFT file: ${err.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayResults(data) {
+            tabs.classList.add('visible');
+            resetContainer.classList.add('visible');
+            
+            // Update transaction bar
+            const meta = data.metadata;
+            if (meta.transaction) {
+                document.getElementById('txnType').textContent = meta.transaction.type || '—';
+                document.getElementById('txnDate').textContent = meta.transaction.date || '—';
+                document.getElementById('txnAgency').textContent = meta.transaction.orig_agency || '—';
+                document.getElementById('txnCompression').textContent = meta.compression || 'Unknown';
+                transactionBar.classList.add('visible');
+            }
+            
+            // Render validation results
+            if (meta.validation) {
+                renderValidation(meta.validation);
+            }
+            
+            // Render fingerprints
+            renderFingerprints(data.fingerprints, meta.validation);
+            
+            // Render demographics
+            renderDemographics(meta.demographics || {});
+            
+            // Render metadata
+            renderMetadata(meta.raw_fields || []);
+        }
+
+        function renderValidation(validation) {
+            const isValid = validation.is_valid;
+            const statusClass = isValid ? 'valid' : 'invalid';
+            const statusText = isValid ? 'VALID' : 'INCOMPLETE';
+            
+            let html = `
+                <div class="validation-panel ${statusClass}">
+                    <div class="validation-header">
+                        <span class="validation-badge ${statusClass}">${statusText}</span>
+                        <span class="validation-title">${validation.match_type || 'Unknown'}</span>
+                    </div>
+                    <div class="validation-messages">
+            `;
+            
+            // Messages
+            for (const msg of validation.messages || []) {
+                let msgClass = '';
+                if (msg.startsWith('✓')) msgClass = 'success';
+                else if (msg.startsWith('⚠')) msgClass = 'warning';
+                else if (msg.startsWith('✗')) msgClass = 'error';
+                html += `<p class="${msgClass}">${escapeHtml(msg)}</p>`;
+            }
+            
+            html += `</div><div class="validation-details">`;
+            
+            // Fingerprints present
+            if (validation.fingerprints_present && validation.fingerprints_present.length > 0) {
+                html += `
+                    <div class="validation-section">
+                        <h4>Fingerprints Present (${validation.fingerprints_present.length})</h4>
+                        <ul class="validation-list">
+                `;
+                for (const fp of validation.fingerprints_present) {
+                    html += `<li class="present"><span class="icon">✓</span> ${escapeHtml(fp.name)} (Position ${fp.position})</li>`;
+                }
+                html += `</ul></div>`;
+            }
+            
+            // Fingerprints missing
+            if (validation.fingerprints_missing && validation.fingerprints_missing.length > 0) {
+                html += `
+                    <div class="validation-section">
+                        <h4>Fingerprints Missing (${validation.fingerprints_missing.length})</h4>
+                        <ul class="validation-list">
+                `;
+                for (const fp of validation.fingerprints_missing) {
+                    html += `<li class="missing"><span class="icon">✗</span> ${escapeHtml(fp.name)} (Position ${fp.position})</li>`;
+                }
+                html += `</ul></div>`;
+            }
+            
+            // Demographics present
+            if (validation.demographics_present && validation.demographics_present.length > 0) {
+                html += `
+                    <div class="validation-section">
+                        <h4>Demographics Present (${validation.demographics_present.length})</h4>
+                        <ul class="validation-list">
+                `;
+                for (const field of validation.demographics_present) {
+                    html += `<li class="present"><span class="icon">✓</span> ${escapeHtml(field)}</li>`;
+                }
+                html += `</ul></div>`;
+            }
+            
+            // Demographics missing
+            if (validation.demographics_missing && validation.demographics_missing.length > 0) {
+                html += `
+                    <div class="validation-section">
+                        <h4>Demographics Missing (${validation.demographics_missing.length})</h4>
+                        <ul class="validation-list">
+                `;
+                for (const field of validation.demographics_missing) {
+                    html += `<li class="missing"><span class="icon">✗</span> ${escapeHtml(field)}</li>`;
+                }
+                html += `</ul></div>`;
+            }
+            
+            html += `</div></div>`;
+            
+            validationContainer.innerHTML = html;
+        }
+
+        function renderFingerprints(fingerprints, validation) {
+            if (!fingerprints || fingerprints.length === 0) {
+                fingerprintsContainer.innerHTML = `
+                    <div class="no-data">
+                        <div class="icon">🔍</div>
+                        <p>No fingerprint images could be extracted.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'fingerprints-grid';
+
+            fingerprints.forEach((fp, index) => {
+                const card = document.createElement('div');
+                card.className = 'fingerprint-card';
+
+                const img = document.createElement('img');
+                img.src = fp.data;
+                img.alt = `Fingerprint ${index + 1}`;
+                img.addEventListener('click', () => showFullImage(fp.data));
+
+                const info = document.createElement('div');
+                info.className = 'info';
+                
+                // Try to determine finger position from filename
+                let title = `Fingerprint ${index + 1}`;
+                if (fp.name.includes('fld_3')) title = 'Plain Right Four';
+                else if (fp.name.includes('fld_4')) title = 'Plain Left Four';
+                else if (fp.name.includes('fld_5')) title = 'Plain Thumbs';
+                
+                info.innerHTML = `
+                    <h3>${title}</h3>
+                    <p>${fp.format} • ${fp.name}</p>
+                `;
+
+                const actions = document.createElement('div');
+                actions.className = 'actions';
+                
+                const exportBtn = document.createElement('button');
+                exportBtn.className = 'btn btn-small';
+                exportBtn.innerHTML = '<span>💾</span> Save as JPEG';
+                exportBtn.addEventListener('click', () => saveAsJPEG(fp.data, title));
+                
+                actions.appendChild(exportBtn);
+
+                card.appendChild(img);
+                card.appendChild(info);
+                card.appendChild(actions);
+                grid.appendChild(card);
+            });
+
+            fingerprintsContainer.innerHTML = '';
+            fingerprintsContainer.appendChild(grid);
+        }
+
+        function renderDemographics(demographics) {
+            if (Object.keys(demographics).length === 0) {
+                demographicsContainer.innerHTML = `
+                    <div class="no-data">
+                        <div class="icon">👤</div>
+                        <p>No demographic data found in this file.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const labels = {
+                name: 'Full Name',
+                dob: 'Date of Birth',
+                sex: 'Sex',
+                race: 'Race',
+                height: 'Height',
+                weight: 'Weight',
+                eyes: 'Eye Color',
+                hair: 'Hair Color',
+                pob: 'Place of Birth',
+                address: 'Address',
+                reason: 'Reason Fingerprinted',
+                date_printed: 'Date Fingerprinted'
+            };
+
+            const priorityFields = ['name', 'dob', 'sex', 'race', 'height', 'weight', 'eyes', 'hair'];
+            const otherFields = Object.keys(demographics).filter(k => !priorityFields.includes(k));
+
+            let html = '<div class="demographics-panel"><h2>Subject Information</h2><div class="demographics-grid">';
+            
+            for (const field of priorityFields) {
+                if (demographics[field]) {
+                    html += `
+                        <div class="demo-field highlight">
+                            <label>${labels[field] || field}</label>
+                            <value>${escapeHtml(demographics[field])}</value>
+                        </div>
+                    `;
+                }
+            }
+
+            for (const field of otherFields) {
+                html += `
+                    <div class="demo-field">
+                        <label>${labels[field] || field}</label>
+                        <value>${escapeHtml(demographics[field])}</value>
+                    </div>
+                `;
+            }
+
+            html += '</div></div>';
+            demographicsContainer.innerHTML = html;
+        }
+
+        function renderMetadata(fields) {
+            if (!fields || fields.length === 0) {
+                metadataContainer.innerHTML = `
+                    <div class="no-data">
+                        <div class="icon">📄</div>
+                        <p>No metadata available.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Group fields by record type
+            const grouped = {};
+            fields.forEach(f => {
+                const recordType = f.tag.split('.')[0];
+                if (!grouped[recordType]) grouped[recordType] = [];
+                grouped[recordType].push(f);
+            });
+
+            const recordNames = {
+                '1': 'Type-1: Transaction Information',
+                '2': 'Type-2: User-Defined Descriptive Text',
+                '4': 'Type-4: High-Resolution Grayscale Fingerprint',
+                '14': 'Type-14: Variable Resolution Fingerprint'
+            };
+
+            let html = '<div class="metadata-container">';
+            
+            Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b)).forEach((recordType, index) => {
+                const isOpen = index < 2 ? ' open' : '';
+                html += `
+                    <div class="metadata-record${isOpen}">
+                        <div class="metadata-record-header" onclick="this.parentElement.classList.toggle('open')">
+                            <h3>${recordNames[recordType] || `Type-${recordType}`}</h3>
+                            <span class="toggle">▼</span>
+                        </div>
+                        <div class="metadata-record-body">
+                            <table class="metadata-table">
+                `;
+                
+                grouped[recordType].forEach(f => {
+                    html += `
+                        <tr>
+                            <td class="field-tag">${f.tag}</td>
+                            <td class="field-value">${escapeHtml(f.value)}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</table></div></div>';
+            });
+
+            html += '</div>';
+            metadataContainer.innerHTML = html;
+        }
+
+        function showFullImage(dataUrl) {
+            modalImage.src = dataUrl;
+            imageModal.classList.add('visible');
+        }
+
+        function saveAsJPEG(dataUrl, title) {
+            // Create a canvas to convert to JPEG
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                
+                const link = document.createElement('a');
+                const safeName = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                link.download = `${safeName}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.95);
+                link.click();
+            };
+            img.src = dataUrl;
+        }
+
+        function showError(msg) {
+            errorContainer.innerHTML = `
+                <div class="message error">
+                    <span class="icon">⚠️</span>
+                    <div class="content">
+                        <h4>Error</h4>
+                        <p>${escapeHtml(msg)}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function clearError() {
+            errorContainer.innerHTML = '';
+        }
+
+        function showLoading(show) {
+            loadingIndicator.classList.toggle('visible', show);
+        }
+
+        function resetApp() {
+            clearError();
+            fingerprintsContainer.innerHTML = '';
+            demographicsContainer.innerHTML = '';
+            metadataContainer.innerHTML = '';
+            validationContainer.innerHTML = '';
+            fileInfo.classList.remove('visible');
+            resetContainer.classList.remove('visible');
+            fileName.textContent = '';
+            fileInput.value = '';
+            tabs.classList.remove('visible');
+            transactionBar.classList.remove('visible');
+            
+            // Reset to fingerprints tab
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector('.tab-btn[data-tab="fingerprints"]').classList.add('active');
+            document.getElementById('tab-fingerprints').classList.add('active');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Check backend health on load
+        async function checkBackend() {
+            try {
+                const response = await fetch(`${API_BASE}/api/health`);
+                const data = await response.json();
+                if (!data.nbis) {
+                    showError('NBIS tools not found. Make sure the server is running with NBIS installed.');
+                }
+            } catch (e) {
+                // Backend might not be running, show warning
+                console.warn('Backend health check failed:', e);
+            }
+        }
+        
+        checkBackend();
+    </script>
+</body>
+</html>
