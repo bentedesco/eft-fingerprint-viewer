@@ -23,6 +23,7 @@ NBIS_BIN_PATH = "/tmp/nbis-build/bin"
 OPJ_DECOMPRESS = "opj_decompress"
 AN2KTOOL = os.path.join(NBIS_BIN_PATH, "an2ktool")
 DWSQ = os.path.join(NBIS_BIN_PATH, "dwsq")
+IMAGEMAGICK = shutil.which("magick")
 PORT = 8888
 
 # ANSI/NIST separators
@@ -139,6 +140,20 @@ def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
                         except:
                             pass
                         
+                elif record_type == "4":
+                    if field_num == "004":
+                        # Finger position - track which fingers are present
+                        fp = int(value)
+                        # Values of 255 are padding and can be ignored
+                        if fp < 255:
+                            result["fingerprint_records"].append({
+                                "position": fp,
+                                "name": FINGER_POSITION_NAMES.get(fp, f"Unknown ({fp})")
+                            })
+                    elif field_num == "008":
+                        # Track compression type
+                        if not result.get("compression"):
+                            result["compression"] = value
     except Exception as e:
         result["error"] = str(e)
     finally:
@@ -290,6 +305,47 @@ def validate_eft(metadata: dict) -> dict:
     return validation
 
 
+def _parse_ncm_dimensions(ncm_path: Path) -> tuple[int | None, int | None, int]:
+    width = None
+    height = None
+    depth = 8
+    if not ncm_path.exists():
+        return width, height, depth
+    
+    for line in ncm_path.read_text().splitlines():
+        parts = line.strip().split()
+        if len(parts) != 2:
+            continue
+            
+        key, value = parts
+        if key == "PIX_WIDTH":
+            width = int(value)
+        elif key == "PIX_HEIGHT":
+            height = int(value)
+        elif key == "PIX_DEPTH":
+            depth = int(value)
+                
+    return width, height, depth
+
+
+def _convert_raw_to_png(raw_file: Path, output_png: Path, width: int, height: int, depth: int) -> bool:
+    if not IMAGEMAGICK:
+        sys.exit("Missing imagemagick.")
+        
+    result = subprocess.run(
+        [
+            IMAGEMAGICK,
+            "-size", f"{width}x{height}",
+            "-depth", str(depth),
+            f"gray:{raw_file}",
+            str(output_png),
+        ],
+        capture_output=True,
+        text=True
+    )
+    
+    return result.returncode == 0 and output_png.exists()
+
 def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
     """Extract fingerprint images from EFT file using NBIS tools."""
     images = []
@@ -354,20 +410,30 @@ def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
             elif header[:2] == b'\xff\xa0':
                 # Use NBIS dwsq to convert WSQ to raw, then to PNG
                 raw_file = tmp_file.with_suffix('.raw')
+                ncm_file = tmp_file.with_suffix('.ncm')
                 result = subprocess.run(
-                    [DWSQ, "raw", "-r", str(tmp_file), "-o", str(raw_file)],
+                    [DWSQ, "raw", str(tmp_file), "-raw_out"],
                     capture_output=True,
                     text=True
                 )
-                
+
                 # Convert raw to PNG using ImageMagick if available
                 if raw_file.exists():
-                    images.append({
-                        "filename": raw_file.name,
-                        "path": str(raw_file),
-                        "format": "WSQ (raw)",
-                        "original": tmp_file.name
-                    })
+                    width, height, depth = _parse_ncm_dimensions(ncm_file)
+                    if width and height and _convert_raw_to_png(raw_file, output_png, width, height, depth):
+                        images.append({
+                            "filename": output_png.name,
+                            "path": str(output_png),
+                            "format": "WSQ",
+                            "original": tmp_file.name
+                        })
+                    else:
+                        images.append({
+                            "filename": raw_file.name,
+                            "path": str(raw_file),
+                            "format": "WSQ (raw)",
+                            "original": tmp_file.name
+                        })
                     
             # Check if JPEG
             elif header[:3] == b'\xff\xd8\xff':
