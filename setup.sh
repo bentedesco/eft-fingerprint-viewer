@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # EFT Fingerprint Viewer - Setup Script
-# 
+#
 # This script installs all dependencies required to run the EFT Fingerprint Viewer.
 #
 # Usage: ./setup.sh
@@ -74,32 +74,36 @@ fi
 # Build NBIS
 echo ""
 echo -e "${BLUE}[3/4] Building NIST NBIS...${NC}"
-NBIS_BUILD_DIR="/tmp/nbis-build"
-NBIS_SRC_DIR="/tmp/nbis-src"
+PARENT="$(dirname "$(realpath "$0")")"
+BUILD_DIR="${PARENT}/build"
+NBIS_SRC_DIR="${BUILD_DIR}/src/nbis"
+INSTALL_DIR="${BUILD_DIR}"
 
-if [[ -f "${NBIS_BUILD_DIR}/bin/an2ktool" ]]; then
-    echo -e "${GREEN}✓ NBIS already built at ${NBIS_BUILD_DIR}${NC}"
+mkdir -p "${BUILD_DIR}"
+mkdir -p "${INSTALL_DIR}"
+
+if [[ -f "${BUILD_DIR}/bin/an2ktool" ]]; then
+    echo -e "${GREEN}✓ NBIS already built at ${BUILD_DIR}${NC}"
 else
     echo "Cloning NBIS source..."
     rm -rf "${NBIS_SRC_DIR}"
     git clone --depth 1 https://github.com/biometric-technologies/nist-biometric-image-software-nbis.git "${NBIS_SRC_DIR}"
-    
+
     echo "Building NBIS (this may take a few minutes)..."
     cd "${NBIS_SRC_DIR}"
-    mkdir -p "${NBIS_BUILD_DIR}"
-    
+
     # Run setup
-    bash setup.sh "${NBIS_BUILD_DIR}" --without-X11 --STDLIBS
-    
+    bash setup.sh "${INSTALL_DIR}" --without-X11 --STDLIBS
+
     # Build
     make config
     make it
     make install LIBNBIS=no
-    
+
     cd - > /dev/null
-    
+
     # Verify installation
-    if [[ -f "${NBIS_BUILD_DIR}/bin/an2ktool" ]]; then
+    if [[ -f "${INSTALL_DIR}/bin/an2ktool" ]]; then
         echo -e "${GREEN}✓ NBIS built successfully${NC}"
     else
         echo -e "${RED}✗ NBIS build failed${NC}"
@@ -115,16 +119,16 @@ echo ""
 ERRORS=0
 
 # Check an2ktool
-if [[ -f "${NBIS_BUILD_DIR}/bin/an2ktool" ]]; then
-    echo -e "${GREEN}✓ an2ktool: ${NBIS_BUILD_DIR}/bin/an2ktool${NC}"
+if [[ -f "${INSTALL_DIR}/bin/an2ktool" ]]; then
+    echo -e "${GREEN}✓ an2ktool: ${INSTALL_DIR}/bin/an2ktool${NC}"
 else
     echo -e "${RED}✗ an2ktool not found${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
 # Check dwsq
-if [[ -f "${NBIS_BUILD_DIR}/bin/dwsq" ]]; then
-    echo -e "${GREEN}✓ dwsq: ${NBIS_BUILD_DIR}/bin/dwsq${NC}"
+if [[ -f "${INSTALL_DIR}/bin/dwsq" ]]; then
+    echo -e "${GREEN}✓ dwsq: ${INSTALL_DIR}/bin/dwsq${NC}"
 else
     echo -e "${RED}✗ dwsq not found${NC}"
     ERRORS=$((ERRORS + 1))
