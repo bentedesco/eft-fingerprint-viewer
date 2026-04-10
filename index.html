@@ -1144,11 +1144,7 @@
                 const info = document.createElement('div');
                 info.className = 'info';
                 
-                // Try to determine finger position from filename
-                let title = `Fingerprint ${index + 1}`;
-                if (fp.name.includes('fld_3')) title = 'Plain Right Four';
-                else if (fp.name.includes('fld_4')) title = 'Plain Left Four';
-                else if (fp.name.includes('fld_5')) title = 'Plain Thumbs';
+                let title = fp.name || `Fingerprint ${index + 1}`;
                 
                 info.innerHTML = `
                     <h3>${title}</h3>
