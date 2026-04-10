@@ -13,9 +13,8 @@ import shutil
 import base64
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 import cgi
-import io
 import re
 
 # Configuration
