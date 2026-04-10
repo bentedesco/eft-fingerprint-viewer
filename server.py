@@ -31,7 +31,7 @@ RS_CHAR = 0x1E  # Record Separator - Subfield delimiter
 US_CHAR = 0x1F  # Unit Separator - Item delimiter
 
 
-def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
+def parse_eft_metadata(eft_path: str, temp_dir: str | None = None) -> dict:
     """Parse EFT file metadata using an2ktool."""
     result = {
         "transaction": {},
