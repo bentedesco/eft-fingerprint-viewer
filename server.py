@@ -18,7 +18,7 @@ import cgi
 import re
 
 # Configuration
-NBIS_BIN_PATH = Path(__file__).absolute().parent / "build" / "bin"
+NBIS_BIN_PATH = Path(__file__).absolute().parent / "dist" / "bin"
 OPJ_DECOMPRESS = "opj_decompress"
 AN2KTOOL = os.path.join(NBIS_BIN_PATH, "an2ktool")
 DWSQ = os.path.join(NBIS_BIN_PATH, "dwsq")

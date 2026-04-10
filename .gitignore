@@ -45,6 +45,7 @@ fld_*.jpg
 
 # NBIS build (large, should be built locally)
 build/
+dist/
 
 # OpenEFT reference (cloned for reference)
 OpenEFT/
