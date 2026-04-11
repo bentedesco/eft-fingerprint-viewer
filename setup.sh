@@ -76,16 +76,40 @@ echo ""
 echo -e "${BLUE}[3/4] Building NIST NBIS...${NC}"
 NBIS_BUILD_DIR="/tmp/nbis-build"
 NBIS_SRC_DIR="/tmp/nbis-src"
+NBIS_ZIP="/tmp/nbis_v5_0_0.zip"
+
+# Official NIST source — https://www.nist.gov/services-resources/software/nist-biometric-image-software-nbis
+NBIS_URL="https://nigos.nist.gov/nist/nbis/nbis_v5_0_0.zip"
+NBIS_SHA256="0adf8ab0f6b0e4208de50ca00ba21d3d77112ecd66288757ddfed21f6bee92c3"
 
 if [[ -f "${NBIS_BUILD_DIR}/bin/an2ktool" ]]; then
     echo -e "${GREEN}✓ NBIS already built at ${NBIS_BUILD_DIR}${NC}"
 else
-    echo "Cloning NBIS source..."
-    rm -rf "${NBIS_SRC_DIR}"
-    git clone --depth 1 https://github.com/biometric-technologies/nist-biometric-image-software-nbis.git "${NBIS_SRC_DIR}"
+    echo "Downloading NBIS v5.0.0 from NIST (nigos.nist.gov)..."
+    rm -rf "${NBIS_SRC_DIR}" "${NBIS_ZIP}"
+    curl -fSL "${NBIS_URL}" -o "${NBIS_ZIP}"
+    
+    # Verify integrity of the downloaded archive
+    echo "Verifying SHA-256 checksum..."
+    ACTUAL_SHA256=$(shasum -a 256 "${NBIS_ZIP}" | cut -d' ' -f1)
+    if [[ "${ACTUAL_SHA256}" != "${NBIS_SHA256}" ]]; then
+        echo -e "${RED}✗ Checksum verification failed!${NC}"
+        echo "  Expected: ${NBIS_SHA256}"
+        echo "  Got:      ${ACTUAL_SHA256}"
+        echo "The downloaded file may be corrupted or tampered with."
+        rm -f "${NBIS_ZIP}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Checksum verified${NC}"
+    
+    # Extract archive
+    echo "Extracting NBIS source..."
+    mkdir -p "${NBIS_SRC_DIR}"
+    unzip -q "${NBIS_ZIP}" -d "${NBIS_SRC_DIR}"
+    rm -f "${NBIS_ZIP}"
     
     echo "Building NBIS (this may take a few minutes)..."
-    cd "${NBIS_SRC_DIR}"
+    cd "${NBIS_SRC_DIR}/Rel_5.0.0"
     mkdir -p "${NBIS_BUILD_DIR}"
     
     # Run setup
