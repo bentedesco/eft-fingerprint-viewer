@@ -82,12 +82,13 @@ NBIS_SRC_DIR="${BUILD_DIR}/nbis"
 mkdir -p "${BUILD_DIR}"
 mkdir -p "${INSTALL_DIR}"
 
-if [[ -f "${BUILD_DIR}/bin/an2ktool" ]]; then
-    echo -e "${GREEN}✓ NBIS already built at ${BUILD_DIR}${NC}"
+if [[ -f "${INSTALL_DIR}/bin/an2ktool" ]]; then
+    echo -e "${GREEN}✓ NBIS already built at ${INSTALL_DIR}${NC}"
 else
-    echo "Cloning NBIS source..."
+    echo "Downloading NBIS source..."
     rm -rf "${NBIS_SRC_DIR}"
-    git clone --depth 1 https://github.com/biometric-technologies/nist-biometric-image-software-nbis.git "${NBIS_SRC_DIR}"
+    mkdir "${NBIS_SRC_DIR}"
+    curl -sSL https://nigos.nist.gov/nist/nbis/nbis_v5_0_0.zip | bsdtar -xzf - --strip-components 1 -C "${NBIS_SRC_DIR}"
 
     echo "Building NBIS (this may take a few minutes)..."
     cd "${NBIS_SRC_DIR}"
