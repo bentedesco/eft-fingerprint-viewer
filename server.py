@@ -19,7 +19,7 @@ import io
 import re
 
 # Configuration
-NBIS_BIN_PATH = "/tmp/nbis-build/bin"
+NBIS_BIN_PATH = os.environ.get("NBIS_BIN_PATH", "/tmp/nbis-build/bin")
 OPJ_DECOMPRESS = "opj_decompress"
 AN2KTOOL = os.path.join(NBIS_BIN_PATH, "an2ktool")
 DWSQ = os.path.join(NBIS_BIN_PATH, "dwsq")
