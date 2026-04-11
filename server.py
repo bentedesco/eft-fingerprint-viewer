@@ -13,13 +13,12 @@ import shutil
 import base64
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 import cgi
-import io
 import re
 
 # Configuration
-NBIS_BIN_PATH = "/tmp/nbis-build/bin"
+NBIS_BIN_PATH = Path(__file__).absolute().parent / "dist" / "bin"
 OPJ_DECOMPRESS = "opj_decompress"
 AN2KTOOL = os.path.join(NBIS_BIN_PATH, "an2ktool")
 DWSQ = os.path.join(NBIS_BIN_PATH, "dwsq")
@@ -32,7 +31,7 @@ RS_CHAR = 0x1E  # Record Separator - Subfield delimiter
 US_CHAR = 0x1F  # Unit Separator - Item delimiter
 
 
-def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
+def parse_eft_metadata(eft_path: str, temp_dir: str | None = None) -> dict:
     """Parse EFT file metadata using an2ktool."""
     result = {
         "transaction": {},
@@ -42,7 +41,7 @@ def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
         "fingerprint_records": [],
         "validation": {}
     }
-    
+
     # Change to temp directory to avoid temp file conflicts
     original_dir = os.getcwd()
     try:
@@ -54,21 +53,21 @@ def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
                     f.unlink()
                 except:
                     pass
-        
+
         proc = subprocess.run(
             [AN2KTOOL, "-print", "all", eft_path],
             capture_output=True,
             text=True
         )
         output = proc.stdout + proc.stderr
-        
+
         current_record_type = None
-        
+
         for line in output.split('\n'):
             line = line.strip()
             if not line:
                 continue
-                
+
             # Parse field output: 1.1.1.1 [1.001]=value
             match = re.match(r'(\d+\.\d+\.\d+\.\d+)\s+\[(\d+\.\d+)\]=(.*)$', line)
             if match:
@@ -77,13 +76,13 @@ def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
                 value = value.strip().rstrip('\x1f\x1e\x1d\x1c')
                 record_type = tag.split('.')[0]
                 field_num = tag.split('.')[1]
-                
+
                 result["raw_fields"].append({
                     "indices": indices,
                     "tag": tag,
                     "value": value[:200] if len(value) > 200 else value  # Truncate large values
                 })
-                
+
                 # Extract key fields
                 if record_type == "1":
                     if field_num == "004":
@@ -96,7 +95,7 @@ def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
                         result["transaction"]["orig_agency"] = value
                     elif field_num == "009":
                         result["transaction"]["tcn"] = value
-                        
+
                 elif record_type == "2":
                     if field_num == "018":
                         result["demographics"]["name"] = value
@@ -122,7 +121,7 @@ def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
                         result["demographics"]["date_printed"] = format_date(value)
                     elif field_num == "041":
                         result["demographics"]["address"] = value
-                        
+
                 elif record_type == "14":
                     if field_num == "011":
                         # Track compression type
@@ -138,16 +137,16 @@ def parse_eft_metadata(eft_path: str, temp_dir: str = None) -> dict:
                             })
                         except:
                             pass
-                        
+
     except Exception as e:
         result["error"] = str(e)
     finally:
         if temp_dir:
             os.chdir(original_dir)
-    
+
     # Validate the EFT file
     result["validation"] = validate_eft(result)
-    
+
     return result
 
 
@@ -210,28 +209,28 @@ def validate_eft(metadata: dict) -> dict:
         "messages": [],
         "warnings": []
     }
-    
+
     # Get transaction type
     txn_type = metadata.get("transaction", {}).get("type", "").upper()
     validation["transaction_type"] = txn_type
-    
+
     # Get present finger positions
     present_positions = set()
     for fp in metadata.get("fingerprint_records", []):
         present_positions.add(fp["position"])
         validation["fingerprints_present"].append(fp)
-    
+
     # Get requirements for this transaction type
     requirements = EBTS_REQUIREMENTS.get(txn_type, EBTS_REQUIREMENTS.get("FAUF"))
-    
+
     # Check fingerprint requirements - see which option is satisfied
     best_match = None
     best_missing = None
-    
+
     for option in requirements.get("fingerprint_options", []):
         required = set(option["required"])
         missing = required - present_positions
-        
+
         if len(missing) == 0:
             # This option is fully satisfied
             validation["is_valid"] = True
@@ -243,7 +242,7 @@ def validate_eft(metadata: dict) -> dict:
         elif best_missing is None or len(missing) < len(best_missing):
             best_match = option
             best_missing = list(missing)
-    
+
     # If no option is fully satisfied, report what's missing
     if not validation["is_valid"] and best_match:
         validation["match_type"] = f"Incomplete - closest to {best_match['name']}"
@@ -253,47 +252,47 @@ def validate_eft(metadata: dict) -> dict:
                 "name": FINGER_POSITION_NAMES.get(pos, f"Position {pos}")
             })
         validation["messages"].append(f"⚠ Missing {len(best_missing)} fingerprint(s) for {best_match['name']}")
-    
+
     # Check what extra fingerprints we have that aren't in any required set
     all_required = set()
     for option in requirements.get("fingerprint_options", []):
         all_required.update(option["required"])
-    
+
     extra_positions = present_positions - all_required
     if extra_positions:
         for pos in sorted(extra_positions):
             validation["warnings"].append(f"Extra fingerprint at position {pos}: {FINGER_POSITION_NAMES.get(pos, 'Unknown')}")
-    
+
     # Check demographics
     demographics = metadata.get("demographics", {})
     required_demo = requirements.get("required_demographics", [])
-    
+
     for field in required_demo:
         if demographics.get(field):
             validation["demographics_present"].append(field)
         else:
             validation["demographics_missing"].append(field)
-    
+
     if validation["demographics_missing"]:
         validation["messages"].append(f"⚠ Missing {len(validation['demographics_missing'])} demographic field(s)")
         if validation["is_valid"]:
             validation["is_valid"] = False  # Downgrade to invalid if missing required demographics
     else:
         validation["messages"].append("✓ All required demographic fields present")
-    
+
     # Final summary
     if validation["is_valid"]:
         validation["messages"].insert(0, "✓ FILE IS VALID")
     else:
         validation["messages"].insert(0, "✗ FILE IS INCOMPLETE")
-    
+
     return validation
 
 
 def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
     """Extract fingerprint images from EFT file using NBIS tools."""
     images = []
-    
+
     # Clean any existing temp files in output dir
     for f in Path(output_dir).glob("fld_*.tmp"):
         try:
@@ -305,43 +304,43 @@ def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
             f.unlink()
         except:
             pass
-    
+
     # Run an2ktool which creates temp files
     original_dir = os.getcwd()
-    
+
     try:
         os.chdir(output_dir)
-        
+
         # an2ktool extracts images as .tmp files
         subprocess.run(
             [AN2KTOOL, "-print", "all", eft_path],
             capture_output=True,
             text=True
         )
-        
+
         # Find extracted temp files
         tmp_files = sorted(Path(output_dir).glob("fld_*.tmp"))
-        
+
         for tmp_file in tmp_files:
             # Detect format
             with open(tmp_file, 'rb') as f:
                 header = f.read(12)
-            
+
             output_png = tmp_file.with_suffix('.png')
-            
+
             # Check if JPEG 2000 (JP2)
             if header[:12] == b'\x00\x00\x00\x0cjP  \r\n\x87\n':
                 # Rename to .jp2 for opj_decompress
                 jp2_file = tmp_file.with_suffix('.jp2')
                 shutil.copy(tmp_file, jp2_file)
-                
+
                 # Decompress JP2 to PNG
                 result = subprocess.run(
                     [OPJ_DECOMPRESS, "-i", str(jp2_file), "-o", str(output_png)],
                     capture_output=True,
                     text=True
                 )
-                
+
                 if output_png.exists():
                     images.append({
                         "filename": output_png.name,
@@ -349,7 +348,7 @@ def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
                         "format": "JPEG 2000",
                         "original": tmp_file.name
                     })
-                    
+
             # Check if WSQ
             elif header[:2] == b'\xff\xa0':
                 # Use NBIS dwsq to convert WSQ to raw, then to PNG
@@ -359,7 +358,7 @@ def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
                     capture_output=True,
                     text=True
                 )
-                
+
                 # Convert raw to PNG using ImageMagick if available
                 if raw_file.exists():
                     images.append({
@@ -368,7 +367,7 @@ def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
                         "format": "WSQ (raw)",
                         "original": tmp_file.name
                     })
-                    
+
             # Check if JPEG
             elif header[:3] == b'\xff\xd8\xff':
                 # Already JPEG, just rename
@@ -380,10 +379,10 @@ def extract_fingerprint_images(eft_path: str, output_dir: str) -> list:
                     "format": "JPEG",
                     "original": tmp_file.name
                 })
-                
+
     finally:
         os.chdir(original_dir)
-    
+
     return images
 
 
@@ -431,7 +430,7 @@ def image_to_base64(image_path: str) -> str:
     """Convert image file to base64 data URL."""
     with open(image_path, 'rb') as f:
         data = f.read()
-    
+
     # Determine MIME type
     ext = Path(image_path).suffix.lower()
     mime_types = {
@@ -441,18 +440,18 @@ def image_to_base64(image_path: str) -> str:
         '.gif': 'image/gif'
     }
     mime_type = mime_types.get(ext, 'application/octet-stream')
-    
+
     b64 = base64.b64encode(data).decode('utf-8')
     return f"data:{mime_type};base64,{b64}"
 
 
 class EFTViewerHandler(SimpleHTTPRequestHandler):
     """HTTP request handler for EFT Viewer."""
-    
+
     def __init__(self, *args, **kwargs):
         # Set directory to serve static files from
         super().__init__(*args, directory=str(Path(__file__).parent), **kwargs)
-    
+
     def do_OPTIONS(self):
         """Handle CORS preflight."""
         self.send_response(200)
@@ -460,18 +459,18 @@ class EFTViewerHandler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-    
+
     def do_POST(self):
         """Handle POST requests for file upload."""
         if self.path == '/api/parse':
             self.handle_parse_request()
         else:
             self.send_error(404, 'Not Found')
-    
+
     def do_GET(self):
         """Handle GET requests."""
         parsed = urlparse(self.path)
-        
+
         if parsed.path == '/api/health':
             self.send_json_response({"status": "ok", "nbis": os.path.exists(AN2KTOOL)})
         elif parsed.path.startswith('/output/'):
@@ -480,11 +479,11 @@ class EFTViewerHandler(SimpleHTTPRequestHandler):
         else:
             # Serve static files
             super().do_GET()
-    
+
     def handle_parse_request(self):
         """Parse uploaded EFT file."""
         content_type = self.headers.get('Content-Type', '')
-        
+
         if 'multipart/form-data' in content_type:
             # Parse multipart form data
             form = cgi.FieldStorage(
@@ -495,11 +494,11 @@ class EFTViewerHandler(SimpleHTTPRequestHandler):
                     'CONTENT_TYPE': content_type
                 }
             )
-            
+
             if 'file' not in form:
                 self.send_json_response({"error": "No file uploaded"}, 400)
                 return
-            
+
             file_item = form['file']
             file_data = file_item.file.read()
             file_name = file_item.filename
@@ -508,21 +507,21 @@ class EFTViewerHandler(SimpleHTTPRequestHandler):
             content_length = int(self.headers.get('Content-Length', 0))
             file_data = self.rfile.read(content_length)
             file_name = 'uploaded.eft'
-        
+
         # Create temp directory for processing
         with tempfile.TemporaryDirectory() as temp_dir:
             eft_path = os.path.join(temp_dir, file_name)
-            
+
             # Save uploaded file
             with open(eft_path, 'wb') as f:
                 f.write(file_data)
-            
+
             # Parse metadata
             metadata = parse_eft_metadata(eft_path, temp_dir)
-            
+
             # Extract images
             images = extract_fingerprint_images(eft_path, temp_dir)
-            
+
             # Convert images to base64 for response
             fingerprints = []
             for img in images:
@@ -540,24 +539,24 @@ class EFTViewerHandler(SimpleHTTPRequestHandler):
                             "format": img['format'],
                             "error": str(e)
                         })
-            
+
             response = {
                 "filename": file_name,
                 "metadata": metadata,
                 "fingerprints": fingerprints
             }
-            
+
             self.send_json_response(response)
-    
+
     def serve_output_file(self, filename):
         """Serve a file from the output directory."""
         output_dir = Path(__file__).parent / 'output'
         file_path = output_dir / filename
-        
+
         if not file_path.exists() or not file_path.is_relative_to(output_dir):
             self.send_error(404, 'File not found')
             return
-        
+
         # Determine content type
         ext = file_path.suffix.lower()
         content_types = {
@@ -567,22 +566,22 @@ class EFTViewerHandler(SimpleHTTPRequestHandler):
             '.gif': 'image/gif'
         }
         content_type = content_types.get(ext, 'application/octet-stream')
-        
+
         with open(file_path, 'rb') as f:
             data = f.read()
-        
+
         self.send_response(200)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', len(data))
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(data)
-    
+
     def send_json_response(self, data, status=200):
         """Send JSON response."""
         response = json.dumps(data)
         encoded = response.encode('utf-8')
-        
+
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', len(encoded))
@@ -599,13 +598,13 @@ def main():
     print(f"an2ktool: {'✓ Found' if os.path.exists(AN2KTOOL) else '✗ Not found'}")
     print(f"opj_decompress: {'✓ Found' if shutil.which(OPJ_DECOMPRESS) else '✗ Not found'}")
     print(f"=" * 50)
-    
+
     os.chdir(Path(__file__).parent)
-    
+
     server = HTTPServer(('', PORT), EFTViewerHandler)
     print(f"\nServer running at http://localhost:{PORT}")
     print("Press Ctrl+C to stop\n")
-    
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -615,3 +614,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
